@@ -9,6 +9,15 @@
 #include <iostream>
 #include <vector>
 
+#define PRINT_COLOR_RED "\033[22;31m"
+#define PRINT_COLOR_YELLOW "\033[22;33m"
+#define PRINT_COLOR_GRAY "\033[22;90m"
+#define PRINT_COLOR_RESET "\033[0m"
+#define RR(__O__) std::cerr<<PRINT_COLOR_RED" ERROR: "<<PRINT_COLOR_RESET<<__O__<<std::endl
+#define EM(__O__) std::cout<<PRINT_COLOR_YELLOW" INFO: "<<PRINT_COLOR_RESET<<__O__<<std::endl
+#define DB(__O__) std::cout<<PRINT_COLOR_GRAY"  DEBUG: "<<PRINT_COLOR_RESET<<__O__<<std::endl
+
+
 // DBoW2
 #include "DBoW2.h" // defines OrbVocabulary and OrbDatabase
 
@@ -20,12 +29,23 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d.hpp>
 
+#include <gflags/gflags.h>
+#include <sys/stat.h>
+
+#include <boost/filesystem.hpp>
+
 
 using namespace DBoW2;
 using namespace DUtils;
 using namespace std;
+using boost::filesystem::path;
+using boost::filesystem::directory_iterator;
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+// number of training images
+const int NIMAGES = 4;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void loadFeatures(vector<vector<cv::Mat> > &features);
 
@@ -35,12 +55,20 @@ void testVocCreation(const vector<vector<cv::Mat> > &features);
 
 void testDatabase(const vector<vector<cv::Mat> > &features);
 
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-
-// number of training images
-const int NIMAGES = 4;
-
+vector<string> listFiles(const string &strpath, const string &ext = "") {
+  path p(strpath);
+  vector<string> files;
+  for (auto i = directory_iterator(p); i != directory_iterator(); i++) {
+    if (!is_directory(i->path())) { /*not a directory*/
+      string filename = i->path().filename().string();
+      const string &file_ext = extension(i->path());
+      if(ext.empty() || (!ext.empty() && file_ext == ext)) {
+        files.emplace_back(filename);
+      }
+    }
+  }
+  return files;
+}
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 void wait() {
@@ -50,7 +78,46 @@ void wait() {
 
 // ----------------------------------------------------------------------------
 
-int main() {
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/// gflags
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+DEFINE_string(dir, "", "directory to jpg images");
+
+static bool ValidatePathIsDirectory(const char *flag, const std::string &path) {
+  if (path.empty()) {
+    return false; // assume current working directory
+  }
+
+  bool success = false;
+  struct stat buffer;
+  if (stat(path.c_str(), &buffer) == 0) {
+    success = (buffer.st_mode & S_IFDIR) == S_IFDIR; // check for directory mask in st_mode
+  }
+  if (!success) {
+    RR("path is not a directory: " << path);
+  }
+
+  return success;
+}
+
+static bool ValidateFileExists(const char *flag, const std::string &filename) {
+  struct stat buffer;
+  return (stat(filename.c_str(), &buffer) == 0);
+}
+
+DEFINE_validator(dir, &ValidatePathIsDirectory);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/// main
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+int main(int argc, char **argv) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ShutDownCommandLineFlags();
+
+  const char *ext = ".jpg";
+  vector<string> image_paths = listFiles(FLAGS_dir, ext);
+  EM("Found " << image_paths.size() << " " << ext << " files");
+
   vector<vector<cv::Mat> > features;
   loadFeatures(features);
 

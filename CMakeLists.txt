@@ -1,3 +1,4 @@
+SET(CMAKE_CXX_STANDARD 11)
 cmake_minimum_required(VERSION 2.8)
 project(DBoW2)
 include(ExternalProject)
@@ -84,9 +85,16 @@ if(BUILD_Demo)
 
   endif(NOT GFLAGS_FOUND)
 
+  #Boost
+  find_package(Boost REQUIRED COMPONENTS system filesystem)
+    include_directories(${Boost_INCLUDE_DIRS})
+  if(NOT Boost_FOUND)
+    message("BOOST NOT FOUND")
+  endif()
+
 
   include_directories(${GFLAGS_INCLUDE_DIR})
-  target_link_libraries(demo ${PROJECT_NAME} ${OpenCV_LIBS} ${DLib_LIBS} gflags)
+  target_link_libraries(demo ${PROJECT_NAME} ${OpenCV_LIBS} ${DLib_LIBS} gflags  ${Boost_LIBRARIES})
   file(COPY demo/images DESTINATION ${CMAKE_BINARY_DIR}/)
 endif(BUILD_Demo)
 
