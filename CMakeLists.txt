@@ -70,7 +70,23 @@ endif(BUILD_DBoW2)
 
 if(BUILD_Demo)
   add_executable(demo demo/demo.cpp)
-  target_link_libraries(demo ${PROJECT_NAME} ${OpenCV_LIBS} ${DLib_LIBS})
+  set(GFLAGS_INCLUDE_DIR "/usr/include")
+  set(GFLAGS_LIBRARIES gflags)
+  find_file(GFLAGS_FOUND "gflags/gflags.h" PATHS ${GFLAGS_INCLUDE_DIR})
+
+  if (NOT GFLAGS_FOUND)
+
+    message("")
+    message(STATUS "Gflags not found")
+    message("")
+    set(GFLAGS_INCLUDE_DIR "")
+    set(GFLAGS_LIBRARIES "")
+
+  endif(NOT GFLAGS_FOUND)
+
+
+  include_directories(${GFLAGS_INCLUDE_DIR})
+  target_link_libraries(demo ${PROJECT_NAME} ${OpenCV_LIBS} ${DLib_LIBS} gflags)
   file(COPY demo/images DESTINATION ${CMAKE_BINARY_DIR}/)
 endif(BUILD_Demo)
 
