@@ -42,18 +42,15 @@ using boost::filesystem::path;
 using boost::filesystem::directory_iterator;
 
 
-// number of training images
-const int NIMAGES = 4;
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-void loadFeatures(vector<vector<cv::Mat> > &features);
+void loadFeatures(vector<vector<cv::Mat>> features, vector<string> image_paths);
 
 void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
 
-void testVocCreation(const vector<vector<cv::Mat> > &features);
+void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_paths);
 
-void testDatabase(const vector<vector<cv::Mat> > &features);
+void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths);
 
 vector<string> listFiles(const string &strpath, const string &ext = "") {
   path p(strpath);
@@ -63,7 +60,7 @@ vector<string> listFiles(const string &strpath, const string &ext = "") {
       string filename = i->path().filename().string();
       const string &file_ext = extension(i->path());
       if(ext.empty() || (!ext.empty() && file_ext == ext)) {
-        files.emplace_back(filename);
+        files.emplace_back(strpath + i->path().preferred_separator + i->path().string());
       }
     }
   }
@@ -82,6 +79,8 @@ void wait() {
 /// gflags
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 DEFINE_string(dir, "", "directory to jpg images");
+DEFINE_int32(branching_level, 9, "internal: k-d tree branch level");
+DEFINE_int32(depth_factors, 3, "internal: k-d tree depth factor");
 
 static bool ValidatePathIsDirectory(const char *flag, const std::string &path) {
   if (path.empty()) {
@@ -115,35 +114,35 @@ int main(int argc, char **argv) {
   gflags::ShutDownCommandLineFlags();
 
   const char *ext = ".jpg";
-  vector<string> image_paths = listFiles(FLAGS_dir, ext);
+  auto image_paths = listFiles(FLAGS_dir, ext);
   EM("Found " << image_paths.size() << " " << ext << " files");
+  for(auto &file : image_paths) {
+    EM(file);
+  }
 
   vector<vector<cv::Mat> > features;
-  loadFeatures(features);
+  loadFeatures(features, image_paths);
 
-  testVocCreation(features);
+  testVocCreation(features, image_paths);
 
   wait();
 
-  testDatabase(features);
+  testDatabase(features, image_paths);
 
   return 0;
 }
 
 // ----------------------------------------------------------------------------
 
-void loadFeatures(vector<vector<cv::Mat> > &features) {
+void loadFeatures(vector<vector<cv::Mat>> features, vector<string> image_paths) {
   features.clear();
-  features.reserve(NIMAGES);
+  features.reserve(image_paths.size());
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
   cout << "Extracting ORB features..." << endl;
-  for (int i = 0; i < NIMAGES; ++i) {
-    stringstream ss;
-    ss << "images/image" << i << ".png";
-
-    cv::Mat image = cv::imread(ss.str(), 0);
+  for (auto &file : image_paths) {
+    cv::Mat image = cv::imread(file, 0);
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
     cv::Mat descriptors;
@@ -167,10 +166,10 @@ void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out) {
 
 // ----------------------------------------------------------------------------
 
-void testVocCreation(const vector<vector<cv::Mat> > &features) {
+void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_paths) {
   // branching factor and depth levels 
-  const int k = 9;
-  const int L = 3;
+  const int k = FLAGS_branching_level;
+  const int L = FLAGS_depth_factors;
   const WeightingType weight = TF_IDF;
   const ScoringType score = L1_NORM;
 
@@ -186,9 +185,9 @@ void testVocCreation(const vector<vector<cv::Mat> > &features) {
   // lets do something with this vocabulary
   cout << "Matching images against themselves (0 low, 1 high): " << endl;
   BowVector v1, v2;
-  for (int i = 0; i < NIMAGES; i++) {
+  for (int i = 0; i < image_paths.size(); i++) {
     voc.transform(features[i], v1);
-    for (int j = 0; j < NIMAGES; j++) {
+    for (int j = 0; j < image_paths.size(); j++) {
       voc.transform(features[j], v2);
 
       double score = voc.score(v1, v2);
@@ -204,7 +203,7 @@ void testVocCreation(const vector<vector<cv::Mat> > &features) {
 
 // ----------------------------------------------------------------------------
 
-void testDatabase(const vector<vector<cv::Mat> > &features) {
+void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) {
   cout << "Creating a small database..." << endl;
 
   // load the vocabulary from disk
@@ -217,7 +216,7 @@ void testDatabase(const vector<vector<cv::Mat> > &features) {
   // db creates a copy of the vocabulary, we may get rid of "voc" now
 
   // add images to the database
-  for (int i = 0; i < NIMAGES; i++) {
+  for (int i = 0; i < image_paths.size(); i++) {
     db.add(features[i]);
   }
 
@@ -229,7 +228,7 @@ void testDatabase(const vector<vector<cv::Mat> > &features) {
   cout << "Querying the database: " << endl;
 
   QueryResults ret;
-  for (int i = 0; i < NIMAGES; i++) {
+  for (int i = 0; i < image_paths.size(); i++) {
     db.query(features[i], ret, 4);
 
     // ret[0] is always the same image in this case, because we added it to the 
