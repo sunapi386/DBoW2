@@ -45,7 +45,7 @@ using boost::filesystem::directory_iterator;
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-void loadFeatures(vector<vector<cv::Mat>> features, vector<string> image_paths);
+void loadFeatures(vector<vector<cv::Mat>> &features, const vector<string> &image_paths);
 
 void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
 
@@ -67,7 +67,7 @@ vector<string> listFiles(const string &strpath, const string &ext = "") {
   }
   return files;
 }
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void wait() {
   cout << endl << "Press enter to continue" << endl;
@@ -174,23 +174,22 @@ int main(int argc, char **argv) {
 
 // ----------------------------------------------------------------------------
 
-void loadFeatures(vector<vector<cv::Mat>> features, vector<string> image_paths) {
+void loadFeatures(vector<vector<cv::Mat>> &features, const vector<string> &image_paths){
   features.clear();
-  features.reserve(image_paths.size());
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
   cout << "Extracting ORB features..." << endl;
-  for (auto &file : image_paths) {
-    DB("imread " << file);
-    cv::Mat image = cv::imread(file, 0);
+  for (int i = 0; i < image_paths.size(); i++) {
+    DB(i << "/" << image_paths.size() << " imread " << image_paths[i]);
+    cv::Mat image = cv::imread(image_paths[i], 0);
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
     cv::Mat descriptors;
 
     orb->detectAndCompute(image, mask, keypoints, descriptors);
 
-    features.push_back(vector<cv::Mat>());
+    features.emplace_back();
     changeStructure(descriptors, features.back());
   }
 }
@@ -208,11 +207,11 @@ void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out) {
 // ----------------------------------------------------------------------------
 
 void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_paths) {
-  // branching factor and depth levels 
+  // branching factor and depth levels
   const int k = FLAGS_branching_level;
   const int L = FLAGS_depth_factors;
-  const WeightingType weight = TF_IDF;
-  const ScoringType score = L1_NORM;
+  const WeightingType weight = TF_IDF; // TF_IDF, TF, IDF, BINARY
+  const ScoringType score = L1_NORM; // L1_NORM, L2_NORM, CHI_SQUARE, KL, BHATTACHARYYA, DOT_PRODUCT
 
   OrbVocabulary voc(k, L, weight, score);
 
@@ -254,7 +253,7 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
 
   OrbDatabase db(voc, false, 0); // false = do not use direct index
   // (so ignore the last param)
-  // The direct index is useful if we want to retrieve the features that 
+  // The direct index is useful if we want to retrieve the features that
   // belong to some vocabulary node.
   // db creates a copy of the vocabulary, we may get rid of "voc" now
 
@@ -274,7 +273,7 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
   for (int i = 0; i < img_size; i++) {
     db.query(features[i], ret, 4);
 
-    // ret[0] is always the same image in this case, because we added it to the 
+    // ret[0] is always the same image in this case, because we added it to the
     // database. ret[1] is the second best match.
 
     cout << "Searching for Image " << i << ". " << ret << endl;
@@ -288,12 +287,10 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
   db.save(FLAGS_save_db);
   cout << "... done!" << endl;
 
-  // once saved, we can load it again  
+  // once saved, we can load it again
   cout << "Retrieving database once again..." << endl;
   OrbDatabase db2(FLAGS_save_db);
   cout << "... done! This is: " << FLAGS_save_db << endl << db2 << endl;
 }
 
 // ----------------------------------------------------------------------------
-
-
