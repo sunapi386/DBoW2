@@ -14,6 +14,7 @@
 #define PRINT_COLOR_GRAY "\033[22;90m"
 #define PRINT_COLOR_RESET "\033[0m"
 #define RR(__O__) std::cerr<<PRINT_COLOR_RED" ERROR: "<<PRINT_COLOR_RESET<<__O__<<std::endl
+#define WN(__O__) std::cerr<<PRINT_COLOR_RED" WARN: "<<PRINT_COLOR_RESET<<__O__<<std::endl
 #define EM(__O__) std::cout<<PRINT_COLOR_YELLOW" INFO: "<<PRINT_COLOR_RESET<<__O__<<std::endl
 #define DB(__O__) std::cout<<PRINT_COLOR_GRAY"  DEBUG: "<<PRINT_COLOR_RESET<<__O__<<std::endl
 
@@ -59,8 +60,8 @@ vector<string> listFiles(const string &strpath, const string &ext = "") {
     if (!is_directory(i->path())) { /*not a directory*/
       string filename = i->path().filename().string();
       const string &file_ext = extension(i->path());
-      if(ext.empty() || (!ext.empty() && file_ext == ext)) {
-        files.emplace_back(strpath + i->path().preferred_separator + i->path().string());
+      if (ext.empty() || (!ext.empty() && file_ext == ext)) {
+        files.emplace_back(i->path().string());
       }
     }
   }
@@ -78,9 +79,12 @@ void wait() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /// gflags
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-DEFINE_string(dir, "", "directory to jpg images");
+DEFINE_string(dir, "", "directory to use");
+DEFINE_string(ext, ".jpg", "extension to look for");
 DEFINE_int32(branching_level, 9, "internal: k-d tree branch level");
 DEFINE_int32(depth_factors, 3, "internal: k-d tree depth factor");
+DEFINE_string(save_db, "_db.yml.gz", "output postfix db name");
+DEFINE_string(save_voc, "_voc.yml.gz", "output postfix voc name");
 
 static bool ValidatePathIsDirectory(const char *flag, const std::string &path) {
   if (path.empty()) {
@@ -99,10 +103,11 @@ static bool ValidatePathIsDirectory(const char *flag, const std::string &path) {
   return success;
 }
 
-static bool ValidateFileExists(const char *flag, const std::string &filename) {
-  struct stat buffer;
-  return (stat(filename.c_str(), &buffer) == 0);
+static bool fileExists(const std::string &path) {
+  struct stat buffer = {0};
+  return (stat(path.c_str(), &buffer) == 0);
 }
+
 
 DEFINE_validator(dir, &ValidatePathIsDirectory);
 
@@ -113,12 +118,47 @@ int main(int argc, char **argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   gflags::ShutDownCommandLineFlags();
 
-  const char *ext = ".jpg";
-  auto image_paths = listFiles(FLAGS_dir, ext);
-  EM("Found " << image_paths.size() << " " << ext << " files");
-  for(auto &file : image_paths) {
-    EM(file);
+  auto image_paths = listFiles(FLAGS_dir, FLAGS_ext);
+  if(image_paths.empty()) {
+    RR("Found 0 files with extension " << FLAGS_ext << " in " << FLAGS_dir);
+    exit(EXIT_FAILURE);
   }
+  EM("Found " << image_paths.size() << " " << FLAGS_ext << " files");
+  int preview_size = static_cast<int>(image_paths.size() > 10 ? 10 : image_paths.size());
+  EM("Sample " << preview_size << " files:");
+  for (int i = 0; i < preview_size; i++) {
+    EM(image_paths[i]);
+  }
+
+  const path &stem = path(FLAGS_dir).stem();
+  string folder_name(stem.string());
+  FLAGS_save_voc =
+      folder_name + "_" + to_string(FLAGS_branching_level) + "-" + to_string(FLAGS_depth_factors) + FLAGS_save_voc;
+  FLAGS_save_db =
+      folder_name + "_" + to_string(FLAGS_branching_level) + "-" + to_string(FLAGS_depth_factors) + FLAGS_save_db;
+
+  if(fileExists(FLAGS_save_db)) {
+    WN("File exists: " << FLAGS_save_db);
+    WN("It will be over-written!");
+    WN("Proceed?");
+    wait();
+  }
+  if(fileExists(FLAGS_save_voc)) {
+    WN("File exists: " << FLAGS_save_voc);
+    WN("It will be over-written!");
+    WN("Proceed?");
+    wait();
+  }
+
+  EM("Using folder: " << folder_name);
+  EM("-dir            = " << FLAGS_dir);
+  EM("-ext            = " << FLAGS_ext);
+  EM("-save_voc       = " << FLAGS_save_voc);
+  EM("-save_db        = " << FLAGS_save_db);
+  EM("-depth_factors  = " << FLAGS_depth_factors);
+  EM("-branching_level= " << FLAGS_branching_level);
+
+  wait();
 
   vector<vector<cv::Mat> > features;
   loadFeatures(features, image_paths);
@@ -142,6 +182,7 @@ void loadFeatures(vector<vector<cv::Mat>> features, vector<string> image_paths) 
 
   cout << "Extracting ORB features..." << endl;
   for (auto &file : image_paths) {
+    DB("imread " << file);
     cv::Mat image = cv::imread(file, 0);
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
@@ -185,9 +226,10 @@ void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_path
   // lets do something with this vocabulary
   cout << "Matching images against themselves (0 low, 1 high): " << endl;
   BowVector v1, v2;
-  for (int i = 0; i < image_paths.size(); i++) {
+  int img_size = static_cast<int>(image_paths.size());
+  for (int i = 0; i < img_size; i++) {
     voc.transform(features[i], v1);
-    for (int j = 0; j < image_paths.size(); j++) {
+    for (int j = 0; j < img_size; j++) {
       voc.transform(features[j], v2);
 
       double score = voc.score(v1, v2);
@@ -196,8 +238,8 @@ void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_path
   }
 
   // save the vocabulary to disk
-  cout << endl << "Saving vocabulary..." << endl;
-  voc.save("small_voc.yml.gz");
+  cout << endl << "Saving vocabulary... " << FLAGS_save_voc<< endl;
+  voc.save(FLAGS_save_voc);
   cout << "Done" << endl;
 }
 
@@ -205,9 +247,10 @@ void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_path
 
 void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) {
   cout << "Creating a small database..." << endl;
+  int img_size = static_cast<int>(image_paths.size());
 
   // load the vocabulary from disk
-  OrbVocabulary voc("small_voc.yml.gz");
+  OrbVocabulary voc(FLAGS_save_voc);
 
   OrbDatabase db(voc, false, 0); // false = do not use direct index
   // (so ignore the last param)
@@ -216,7 +259,7 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
   // db creates a copy of the vocabulary, we may get rid of "voc" now
 
   // add images to the database
-  for (int i = 0; i < image_paths.size(); i++) {
+  for (int i = 0; i < img_size; i++) {
     db.add(features[i]);
   }
 
@@ -228,7 +271,7 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
   cout << "Querying the database: " << endl;
 
   QueryResults ret;
-  for (int i = 0; i < image_paths.size(); i++) {
+  for (int i = 0; i < img_size; i++) {
     db.query(features[i], ret, 4);
 
     // ret[0] is always the same image in this case, because we added it to the 
@@ -241,14 +284,14 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
 
   // we can save the database. The created file includes the vocabulary
   // and the entries added
-  cout << "Saving database..." << endl;
-  db.save("small_db.yml.gz");
+  cout << "Saving database... " << FLAGS_save_db << endl;
+  db.save(FLAGS_save_db);
   cout << "... done!" << endl;
 
   // once saved, we can load it again  
   cout << "Retrieving database once again..." << endl;
-  OrbDatabase db2("small_db.yml.gz");
-  cout << "... done! This is: " << endl << db2 << endl;
+  OrbDatabase db2(FLAGS_save_db);
+  cout << "... done! This is: " << FLAGS_save_db << endl << db2 << endl;
 }
 
 // ----------------------------------------------------------------------------
