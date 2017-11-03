@@ -223,18 +223,18 @@ void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_path
        << voc << endl << endl;
 
   // lets do something with this vocabulary
-  cout << "Matching images against themselves (0 low, 1 high): " << endl;
-  BowVector v1, v2;
-  int img_size = static_cast<int>(image_paths.size());
-  for (int i = 0; i < img_size; i++) {
-    voc.transform(features[i], v1);
-    for (int j = 0; j < img_size; j++) {
-      voc.transform(features[j], v2);
-
-      double score = voc.score(v1, v2);
-      cout << "Image " << i << " vs Image " << j << ": " << score << endl;
-    }
-  }
+//  cout << "Matching images against themselves (0 low, 1 high): " << endl;
+//  BowVector v1, v2;
+//  int img_size = static_cast<int>(image_paths.size());
+//  for (int i = 0; i < img_size; i++) {
+//    voc.transform(features[i], v1);
+//    for (int j = 0; j < img_size; j++) {
+//      voc.transform(features[j], v2);
+//
+//      double score = voc.score(v1, v2);
+//      cout << "Image " << i << " vs Image " << j << ": " << score << endl;
+//    }
+//  }
 
   // save the vocabulary to disk
   cout << endl << "Saving vocabulary... " << FLAGS_save_voc<< endl;
@@ -267,19 +267,19 @@ void testDatabase(vector<vector<cv::Mat>> features, vector<string> image_paths) 
   cout << "Database information: " << endl << db << endl;
 
   // and query the database
-  cout << "Querying the database: " << endl;
-
-  QueryResults ret;
-  for (int i = 0; i < img_size; i++) {
-    db.query(features[i], ret, 4);
-
-    // ret[0] is always the same image in this case, because we added it to the
-    // database. ret[1] is the second best match.
-
-    cout << "Searching for Image " << i << ". " << ret << endl;
-  }
-
-  cout << endl;
+//  cout << "Querying the database: " << endl;
+//
+//  QueryResults ret;
+//  for (int i = 0; i < img_size; i++) {
+//    db.query(features[i], ret, 4);
+//
+//     ret[0] is always the same image in this case, because we added it to the
+//     database. ret[1] is the second best match.
+//
+//    cout << "Searching for Image " << i << ". " << ret << endl;
+//  }
+//
+//  cout << endl;
 
   // we can save the database. The created file includes the vocabulary
   // and the entries added
