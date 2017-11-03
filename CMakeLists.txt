@@ -92,6 +92,13 @@ if(BUILD_Demo)
     message("BOOST NOT FOUND")
   endif()
 
+  find_package(Threads REQUIRED)
+  if(THREADS_HAVE_PTHREAD_ARG)
+    target_compile_options(demo PUBLIC "-pthread")
+  endif()
+  if(CMAKE_THREAD_LIBS_INIT)
+    target_link_libraries(demo "${CMAKE_THREAD_LIBS_INIT}")
+  endif()
 
   include_directories(${GFLAGS_INCLUDE_DIR})
   target_link_libraries(demo ${PROJECT_NAME} ${OpenCV_LIBS} ${DLib_LIBS} gflags  ${Boost_LIBRARIES})

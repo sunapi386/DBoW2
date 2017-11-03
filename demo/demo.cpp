@@ -6,8 +6,6 @@
  * License: see the LICENSE.txt file
  */
 
-#include <iostream>
-#include <vector>
 
 #define PRINT_COLOR_RED "\033[22;31m"
 #define PRINT_COLOR_YELLOW "\033[22;33m"
@@ -34,7 +32,9 @@
 #include <sys/stat.h>
 
 #include <boost/filesystem.hpp>
-
+#include <future>
+#include <iostream>
+#include <vector>
 
 using namespace DBoW2;
 using namespace DUtils;
@@ -45,7 +45,7 @@ using boost::filesystem::directory_iterator;
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-void loadFeatures(vector<vector<cv::Mat>> &features, const vector<string> &image_paths);
+void loadFeatures(vector<vector<cv::Mat>> &features, vector<string> &image_paths);
 
 void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
 
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
   gflags::ShutDownCommandLineFlags();
 
   auto image_paths = listFiles(FLAGS_dir, FLAGS_ext);
-  if(image_paths.empty()) {
+  if (image_paths.empty()) {
     RR("Found 0 files with extension " << FLAGS_ext << " in " << FLAGS_dir);
     exit(EXIT_FAILURE);
   }
@@ -137,13 +137,13 @@ int main(int argc, char **argv) {
   FLAGS_save_db =
       folder_name + "_" + to_string(FLAGS_branching_level) + "-" + to_string(FLAGS_depth_factors) + FLAGS_save_db;
 
-  if(fileExists(FLAGS_save_db)) {
+  if (fileExists(FLAGS_save_db)) {
     WN("File exists: " << FLAGS_save_db);
     WN("It will be over-written!");
     WN("Proceed?");
     wait();
   }
-  if(fileExists(FLAGS_save_voc)) {
+  if (fileExists(FLAGS_save_voc)) {
     WN("File exists: " << FLAGS_save_voc);
     WN("It will be over-written!");
     WN("Proceed?");
@@ -173,26 +173,47 @@ int main(int argc, char **argv) {
 }
 
 // ----------------------------------------------------------------------------
+void
+asyncImgRead(vector<vector<cv::Mat>> &features,
+             cv::Ptr<cv::ORB> &orb,
+             vector<string> &image_paths,
+             int i) {
+  DB(i << "/" << image_paths.size() << " imread " << image_paths[i]);
+  cv::Mat image = cv::imread(image_paths[i], 0);
+  cv::Mat mask;
+  vector<cv::KeyPoint> keypoints;
+  cv::Mat descriptors;
 
-void loadFeatures(vector<vector<cv::Mat>> &features, const vector<string> &image_paths){
+  orb->detectAndCompute(image, mask, keypoints, descriptors);
+
+  changeStructure(descriptors, features[i]);
+}
+
+void loadFeatures(vector<vector<cv::Mat>> &features, vector<string> &image_paths) {
   features.clear();
+  for (int i = 0; i < image_paths.size(); i++) {
+    features.emplace_back();
+  }
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
   cout << "Extracting ORB features..." << endl;
+
+//  vector<future<void>> futures;
   for (int i = 0; i < image_paths.size(); i++) {
-    DB(i << "/" << image_paths.size() << " imread " << image_paths[i]);
-    cv::Mat image = cv::imread(image_paths[i], 0);
-    cv::Mat mask;
-    vector<cv::KeyPoint> keypoints;
-    cv::Mat descriptors;
-
-    orb->detectAndCompute(image, mask, keypoints, descriptors);
-
-    features.emplace_back();
-    changeStructure(descriptors, features.back());
+//    auto b = bind(&asyncImgRead,
+//                  features,
+//                  orb,
+//                  image_paths,
+//                  i);
+//    futures.emplace_back(async(launch::async, b));
+    asyncImgRead(features, orb, image_paths, i);
   }
+//  for (auto &f:futures) {
+//    f.wait();
+//  }
 }
+
 
 // ----------------------------------------------------------------------------
 
@@ -237,7 +258,7 @@ void testVocCreation(vector<vector<cv::Mat>> features, vector<string> image_path
 //  }
 
   // save the vocabulary to disk
-  cout << endl << "Saving vocabulary... " << FLAGS_save_voc<< endl;
+  cout << endl << "Saving vocabulary... " << FLAGS_save_voc << endl;
   voc.save(FLAGS_save_voc);
   cout << "Done" << endl;
 }
